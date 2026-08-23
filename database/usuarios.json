@@ -1,0 +1,10 @@
+{
+  "usuarios": [
+    {
+      "id": 1,
+      "correo": "admin@tecnisoluciones.com",
+      "password_hash": "$2a$10$nyhdrUrHj9typHiuTElh..HOUBJuF4TCNney3oEu7OoRuQA.a4CnO",
+      "creado_en": "2026-08-22T04:02:57.224Z"
+    }
+  ]
+}

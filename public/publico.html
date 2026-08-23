@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#062a57">
+    <title>Catálogo | TECNISOLUCIONES</title>
+    <link rel="icon" type="image/jpeg" href="/img/tecnisoluciones-coban.jpg">
+    <link rel="stylesheet" href="/css/styles.css">
+    <style>
+      .guest-header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; background:linear-gradient(108deg,#041d40,#0b4e99); color:#fff; box-shadow:0 3px 18px rgba(2,22,51,.24); }
+      .guest-brand { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:800; letter-spacing:.04em; }
+      .guest-mark { display:grid; width:35px; height:35px; place-items:center; border:2px solid #7ee6ed; border-radius:11px; color:#7ee6ed; font-size:21px; font-style:italic; }
+      .guest-info { font-size:12px; color:#c8d9ed; }
+      .guest-cart-panel { position:fixed; top:76px; right:0; width:min(380px,100%); height:calc(100vh - 76px); background:#fff; box-shadow:-4px 0 24px rgba(0,0,0,.15); transform:translateX(100%); transition:transform .3s ease; z-index:50; display:flex; flex-direction:column; }
+      .guest-cart-panel.open { transform:none; }
+      .cart-header { display:flex; justify-content:space-between; align-items:center; padding:18px 20px; border-bottom:1px solid #e5edf5; }
+      .cart-header h2 { margin:0; font-size:18px; }
+      .cart-items { flex:1; overflow:auto; padding:0 20px; }
+      .cart-item { display:grid; grid-template-columns:1fr auto; gap:10px; padding:14px 0; border-bottom:1px solid #f0f5f9; }
+      .cart-item-name { font-weight:700; font-size:14px; }
+      .cart-item-code { color:#7e90a5; font-size:11px; }
+      .cart-item-controls { display:flex; align-items:center; gap:8px; }
+      .cart-footer { padding:18px 20px; border-top:1px solid #e5edf5; background:#fbfdff; }
+      .cart-total-row { display:flex; justify-content:space-between; margin-bottom:14px; }
+      .cart-total-label { color:#647991; font-size:13px; font-weight:700; }
+      .cart-total-value { color:#0b65ce; font-size:24px; font-weight:850; }
+      .cart-actions { display:grid; gap:10px; }
+      .guest-welcome { text-align:center; padding:40px 20px; background:linear-gradient(145deg,#eaf3fd,#f6f9fc); border-radius:12px; margin-bottom:24px; }
+      .guest-welcome h2 { color:#062a57; margin:0 0 8px; }
+      .guest-welcome p { color:#64748b; margin:0; }
+      .contact-form-panel { margin-top:20px; padding:24px; background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+      .contact-form-panel h3 { margin:0 0 16px; color:#062a57; }
+      .form-note { color:#64748b; font-size:13px; margin-bottom:16px; }
+      .btn-toggle-cart { border:0; border-radius:9px; padding:10px 16px; background:rgba(255,255,255,.14); color:#fff; font-size:13px; font-weight:750; position:relative; }
+      .btn-toggle-cart:hover { background:rgba(255,255,255,.2); }
+      .cart-badge { position:absolute; top:-6px; right:-6px; min-width:20px; height:20px; border-radius:10px; background:var(--gold); color:#513404; font-size:10px; font-weight:850; display:grid; place-items:center; }
+      .empty-cart { text-align:center; padding:40px 20px; color:#64748b; }
+      .empty-cart-icon { font-size:42px; color:#dbe4ee; margin-bottom:12px; }
+      @media(max-width:768px) { .guest-header { flex-wrap:wrap; gap:12px; } .guest-cart-panel { width:100%; } }
+    </style>
+  </head>
+  <body>
+    <header class="guest-header">
+      <div class="guest-brand">
+        <span class="guest-mark">T</span>
+        <span>TECNISOLUCIONES <b>CATÁLOGO</b></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="guest-info" id="guest-expiry"></span>
+        <button class="btn-toggle-cart" id="toggle-cart">
+          Carrito <span id="cart-count-guest">0</span>
+          <span class="cart-badge hidden" id="cart-badge">0</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="view active" id="catalogo-guest">
+        <div class="guest-welcome">
+          <h2>Bienvenido al Catálogo de TECNISOLUCIONES</h2>
+          <p>Explora nuestros productos y servicios. Agrega items al carrito y solicita tu cotización.</p>
+        </div>
+        <div class="toolbar">
+          <label class="search"><span>Buscar</span><input id="product-search-guest" type="search" placeholder="Buscar productos"></label>
+          <span id="product-total-guest" class="result-count"></span>
+        </div>
+        <div class="product-grid" id="product-list-guest"></div>
+        <div class="empty-panel hidden" id="product-empty-guest">No hay productos que coincidan con la búsqueda.</div>
+        
+        <div class="contact-form-panel" id="contact-section">
+          <h3>Solicitar Cotización</h3>
+          <p class="form-note">Completa tus datos de contacto y envía tu solicitud. Nos pondremos en contacto contigo a la brevedad.</p>
+          <form id="guest-quote-form" class="form-grid">
+            <label class="wide">Nombre completo o empresa <input id="guest-client-name" maxlength="180" required></label>
+            <label>Teléfono <input id="guest-client-phone" maxlength="20" inputmode="tel"></label>
+            <label>Correo electrónico <input id="guest-client-email" type="email" maxlength="120" required></label>
+            <label class="wide">Dirección <textarea id="guest-client-address" rows="2"></textarea></label>
+            <label class="wide">Notas adicionales <textarea id="guest-quote-notes" rows="3" placeholder="Comentarios sobre tu solicitud..."></textarea></label>
+            <div class="modal-actions" style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:10px;margin-top:10px;">
+              <button class="button secondary" type="button" id="clear-cart-btn">Limpiar carrito</button>
+              <button class="button primary large" type="submit">Enviar solicitud de cotización</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <aside class="guest-cart-panel" id="guest-cart-panel">
+      <div class="cart-header">
+        <h2>Tu Carrito</h2>
+        <button class="icon-button" id="close-cart" aria-label="Cerrar carrito">×</button>
+      </div>
+      <div class="cart-items" id="cart-items-guest">
+        <div class="empty-cart" id="cart-empty-guest">
+          <div class="empty-cart-icon">+</div>
+          <strong>Tu carrito está vacío</strong>
+          <p>Agrega productos del catálogo para comenzar tu cotización.</p>
+        </div>
+      </div>
+      <div class="cart-footer">
+        <div class="cart-total-row">
+          <span class="cart-total-label">Total estimado</span>
+          <strong class="cart-total-value" id="cart-total-guest">Q 0.00</strong>
+        </div>
+        <div class="cart-actions">
+          <button class="button secondary" id="clear-cart-guest">Limpiar carrito</button>
+          <button class="button primary" id="scroll-to-contact">Continuar con solicitud</button>
+        </div>
+      </div>
+    </aside>
+
+    <dialog class="modal preview-modal" id="quote-success-modal">
+      <article class="modal-card" style="text-align:center;padding:32px 24px;">
+        <div style="font-size:48px;color:#0f8a5f;margin-bottom:16px;">OK</div>
+        <h2 style="margin:0 0 12px;color:#062a57;">¡Solicitud Enviada!</h2>
+        <p style="color:#64748b;margin-bottom:24px;">Hemos recibido tu solicitud de cotización. Un asesor se pondrá en contacto contigo pronto.</p>
+        <button class="button primary" id="close-success-modal">Aceptar</button>
+      </article>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    
+    <script src="/js/guest.js"></script>
+  </body>
+</html>

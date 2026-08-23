@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title">
+  <title>TECNISOLUCIONES</title>
+  <circle cx="60" cy="60" r="56" fill="#063e86" stroke="#f3be28" stroke-width="4"/>
+  <circle cx="60" cy="60" r="47" fill="none" stroke="#f3be28" stroke-width="1.5" opacity=".85"/>
+  <path d="M27 37h66M60 26v69" stroke="#f3be28" stroke-width="3" stroke-linecap="round"/>
+  <text x="60" y="76" fill="#fff" font-family="Arial, sans-serif" font-size="48" font-weight="800" text-anchor="middle">T</text>
+  <text x="60" y="101" fill="#f3be28" font-family="Arial, sans-serif" font-size="7" font-weight="700" letter-spacing="1.4" text-anchor="middle">COBÁN</text>
+</svg>

@@ -1,0 +1,61 @@
+{
+  "clients": [],
+  "products": [
+    {
+      "id": 1,
+      "codigo": "CAM-DAH-2MP",
+      "nombre": "Cámara Dahua 2MP",
+      "descripcion": "Cámara HD con visión nocturna y protección IP67.",
+      "precio": 350,
+      "creado_en": "2026-08-22T04:02:57.102Z",
+      "actualizado_en": "2026-08-22T04:02:57.102Z"
+    },
+    {
+      "id": 2,
+      "codigo": "CAM-HIK-4MP",
+      "nombre": "Cámara Hikvision 4MP",
+      "descripcion": "Cámara IP con detección inteligente y compresión H.265+.",
+      "precio": 375,
+      "creado_en": "2026-08-22T04:02:57.102Z",
+      "actualizado_en": "2026-08-22T04:02:57.102Z"
+    },
+    {
+      "id": 3,
+      "codigo": "DVR-8CH",
+      "nombre": "DVR 8 canales",
+      "descripcion": "Grabador digital con acceso remoto y soporte para disco duro.",
+      "precio": 850,
+      "creado_en": "2026-08-22T04:02:57.102Z",
+      "actualizado_en": "2026-08-22T04:02:57.102Z"
+    },
+    {
+      "id": 4,
+      "codigo": "NVR-4POE",
+      "nombre": "NVR 4 canales PoE",
+      "descripcion": "Grabador IP con PoE integrado y resolución de hasta 8 MP.",
+      "precio": 950,
+      "creado_en": "2026-08-22T04:02:57.102Z",
+      "actualizado_en": "2026-08-22T04:02:57.102Z"
+    },
+    {
+      "id": 5,
+      "codigo": "BAL-UTP",
+      "nombre": "Video balun (par)",
+      "descripcion": "Transmisor y receptor de video por cable UTP Cat5e.",
+      "precio": 45,
+      "creado_en": "2026-08-22T04:02:57.102Z",
+      "actualizado_en": "2026-08-22T04:02:57.102Z"
+    },
+    {
+      "id": 6,
+      "codigo": "INS-CCTV",
+      "nombre": "Servicio de instalación",
+      "descripcion": "Instalación, canaleta, fijaciones y configuración del sistema.",
+      "precio": 600,
+      "creado_en": "2026-08-22T04:02:57.102Z",
+      "actualizado_en": "2026-08-22T04:02:57.102Z"
+    }
+  ],
+  "quotes": [],
+  "guestTokens": []
+}

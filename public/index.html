@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#062a57">
+    <title>Cotizador | TECNISOLUCIONES</title>
+    <link rel="icon" type="image/jpeg" href="/img/tecnisoluciones-coban.jpg">
+    <link rel="stylesheet" href="/css/styles.css">
+  </head>
+  <body>
+    <section class="login-screen" id="login-screen" aria-labelledby="login-title">
+      <form class="login-card" id="login-form">
+        <img class="login-logo" src="/img/tecnisoluciones-coban.jpg" alt="Logotipo de Tecnisoluciones Cobán">
+        <p class="login-welcome">Acceso</p>
+        <h1 id="login-title">TECNISOLUCIONES<br>COBÁN</h1>
+        <p class="login-copy">Ingresa tus credenciales autorizadas para continuar.</p>
+        <label class="login-label" for="login-email">Correo electrónico autorizado</label>
+        <input id="login-email" type="email" autocomplete="username" maxlength="120" placeholder="admin@tecnisoluciones.com" required>
+        <label class="login-label" for="login-password">Contraseña de seguridad</label>
+        <div class="password-field">
+          <input id="login-password" type="password" autocomplete="current-password" minlength="6" placeholder="••••••••" required>
+          <button class="password-toggle" id="password-toggle" type="button" aria-label="Mostrar contraseña">Ver</button>
+        </div>
+        <p class="login-error hidden" id="login-error" role="alert"></p>
+        <button class="login-submit" id="login-submit" type="submit">Ingresar</button>
+      </form>
+    </section>
+
+    <div class="app-shell" id="app-shell" hidden>
+      <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Abrir menú" aria-expanded="false">Menú</button>
+      <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+      <aside class="sidebar">
+        <div class="brand-wrap">
+          <a class="brand" href="#catalogo" aria-label="Ir al catálogo">
+            <span class="brand-mark">T</span>
+            <span>TECNISOLUCIONES <b>COTIZADOR</b></span>
+          </a>
+        </div>
+
+        <nav class="navigation" aria-label="Secciones">
+          <button class="nav-link active" data-section="catalogo">Catálogo</button>
+          <button class="nav-link" data-section="cotizacion">Nueva Cotización <span id="cart-count">0</span></button>
+          <button class="nav-link" data-section="historial">Historial</button>
+          <button class="nav-link" data-section="administradores">Administradores</button>
+          <button class="nav-link sidebar-logout" id="logout-button" type="button">Cerrar Sesión</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="connection" id="connection-status" title="Estado de conexión">Comprobando conexión…</span>
+          <div class="account-menu">
+            <span id="session-user" title="Administrador autenticado"></span>
+            <button class="new-admin-button" id="new-admin-button" type="button">Nuevo admin</button>
+            <button class="secondary-button" id="guest-token-button" type="button">Copiar Enlace del Catálogo</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="main-panel">
+        <main class="page">
+          <section class="view active" id="catalogo">
+            <div class="view-heading">
+              <div>
+                <p class="overline">Inventario comercial</p>
+                <h1>Catálogo de productos</h1>
+                <p class="intro">Añade productos al carrito o registra nuevos artículos y servicios.</p>
+              </div>
+              <button class="button primary" data-open-modal="product-modal">Nuevo producto</button>
+            </div>
+            <div class="toolbar">
+              <label class="search"><span>Buscar</span><input id="product-search" type="search" placeholder="Buscar productos"></label>
+              <span id="product-total" class="result-count"></span>
+            </div>
+            <div class="product-grid" id="product-list"></div>
+            <div class="empty-panel hidden" id="product-empty">No hay productos que coincidan con la búsqueda.</div>
+          </section>
+
+          <section class="view" id="cotizacion">
+            <div class="view-heading compact-heading">
+              <div>
+                <p class="overline">Documento comercial</p>
+                <h1>Nueva cotización</h1>
+              </div>
+              <span class="quote-code" id="draft-code">BORRADOR</span>
+            </div>
+            <div class="quote-layout">
+              <aside class="quote-sidebar">
+                <section class="panel form-panel">
+                  <div class="panel-header"><h2>Datos generales</h2></div>
+                  <div class="form-content">
+                    <label>Cliente
+                      <input id="quote-client-name" type="text" maxlength="180" placeholder="Nombre o empresa" required>
+                    </label>
+                    <label>Fecha
+                      <input id="quote-date" type="date">
+                    </label>
+                    <label>Estado
+                      <select id="quote-status">
+                        <option>Borrador</option>
+                        <option>Enviada</option>
+                        <option>Aprobada</option>
+                        <option>Rechazada</option>
+                      </select>
+                    </label>
+                    <label>Notas
+                      <textarea id="quote-notes" rows="4" placeholder="Condiciones, vigencia u observaciones"></textarea>
+                    </label>
+                  </div>
+                </section>
+                <section class="tip-card">
+                  <strong>Los precios se toman del catálogo</strong>
+                  <span>El total se recalcula en el servidor al guardar la cotización.</span>
+                </section>
+              </aside>
+              <div class="quote-content">
+                <section class="panel">
+                  <div class="panel-header"><h2>Productos seleccionados</h2><span class="chip" id="item-total">0 artículos</span></div>
+                  <div class="table-wrap">
+                    <table>
+                      <thead><tr><th>Producto</th><th class="center">Cantidad</th><th class="right">Precio unit.</th><th class="right">Subtotal</th><th></th></tr></thead>
+                      <tbody id="cart-body"></tbody>
+                    </table>
+                    <div class="cart-empty" id="cart-empty">
+                      <div class="empty-icon">+</div>
+                      <strong>Tu cotización está vacía</strong>
+                      <span>Agrega productos desde el catálogo para comenzar.</span>
+                      <button class="button secondary" data-section="catalogo">Ir al catálogo</button>
+                    </div>
+                  </div>
+                  <div class="quote-total"><span>Total estimado</span><strong id="quote-total">Q 0.00</strong></div>
+                </section>
+                <div class="quote-actions">
+                  <button class="button secondary" id="clear-cart">Limpiar</button>
+                  <button class="button primary large" id="save-quote">Guardar cotización</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="administradores">
+            <div class="view-heading">
+              <div>
+                <p class="overline">Seguridad</p>
+                <h1>Administradores</h1>
+                <p class="intro">Gestiona las cuentas autorizadas con privacidad y control de acceso.</p>
+              </div>
+              <button class="button primary" id="add-admin-button" type="button">Agregar administrador</button>
+            </div>
+            <div class="panel admin-panel">
+              <div class="panel-header admin-header">
+                <h2>Total de Administradores: <span id="admin-count">0</span></h2>
+              </div>
+              <div class="table-wrap">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Correo</th>
+                      <th>Rol</th>
+                      <th>Fecha de creación</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admin-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="historial">
+            <div class="view-heading">
+              <div>
+                <p class="overline">Seguimiento</p>
+                <h1>Cotizaciones guardadas</h1>
+                <p class="intro">Consulta, imprime o elimina documentos registrados.</p>
+              </div>
+              <button class="button secondary" id="refresh-quotes">Actualizar</button>
+            </div>
+            <div class="history-grid" id="quote-list"></div>
+            <div class="empty-panel hidden" id="quote-empty">Todavía no se han guardado cotizaciones.</div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <dialog class="modal" id="product-modal">
+      <form class="modal-card" id="product-form" method="dialog">
+        <div class="modal-header"><div><p class="overline">Catálogo</p><h2>Nuevo producto</h2></div><button class="icon-button" type="button" data-close-modal="product-modal" aria-label="Cerrar">×</button></div>
+        <div class="form-grid">
+          <label class="wide">Nombre <input id="product-name" maxlength="180" required></label>
+          <label>Precio (Q) <input id="product-price" type="number" min="0.01" step="0.01" required></label>
+          <label class="wide">Descripción <textarea id="product-description" rows="4" placeholder="Características principales"></textarea></label>
+        </div>
+        <div class="modal-actions"><button class="button secondary" type="button" data-close-modal="product-modal">Cancelar</button><button class="button primary" type="submit">Guardar producto</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="modal preview-modal" id="quote-preview-modal">
+      <article class="modal-card quote-preview" id="quote-preview"></article>
+    </dialog>
+
+    <dialog class="modal" id="admin-modal">
+      <form class="modal-card" id="admin-form">
+        <div class="modal-header"><div><p class="overline">Seguridad</p><h2>Agregar Nuevo Administrador</h2></div><button class="icon-button" type="button" data-close-modal="admin-modal" aria-label="Cerrar">×</button></div>
+        <p class="admin-form-copy">Crea una cuenta autorizada para administrar el cotizador.</p>
+        <div class="form-grid">
+          <label class="wide">Nombre completo <input id="admin-name" type="text" maxlength="120" placeholder="Nombre y apellido" required></label>
+          <label class="wide">Correo electrónico <input id="admin-email" type="email" maxlength="120" autocomplete="email" placeholder="nuevo_admin@tecnisoluciones.com" required></label>
+          <label>Contraseña inicial <input id="admin-password" type="password" minlength="6" autocomplete="new-password" placeholder="Mínimo 6 caracteres" required></label>
+          <label>Confirmar contraseña <input id="admin-password-confirm" type="password" minlength="6" autocomplete="new-password" required></label>
+        </div>
+        <div class="modal-actions"><button class="button secondary" type="button" data-close-modal="admin-modal">Cancelar</button><button class="button primary" type="submit">Crear administrador</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="profile-modal">
+      <form class="modal-card" id="profile-form">
+        <div class="modal-header"><div><p class="overline">Perfil</p><h2>Mi perfil</h2></div><button class="icon-button" type="button" data-close-modal="profile-modal" aria-label="Cerrar">×</button></div>
+        <p class="admin-form-copy">Actualiza los datos de tu cuenta y, si deseas, cambia tu contraseña.</p>
+        <div class="form-grid">
+          <label class="wide">Nombre completo <input id="profile-name" type="text" maxlength="120" required></label>
+          <label class="wide">Correo electrónico <input id="profile-email" type="email" maxlength="120" autocomplete="email" required></label>
+          <label>Contraseña nueva <input id="profile-password" type="password" minlength="6" autocomplete="new-password" placeholder="Opcional"></label>
+          <label>Confirmar contraseña <input id="profile-password-confirm" type="password" minlength="6" autocomplete="new-password" placeholder="Opcional"></label>
+        </div>
+        <div class="modal-actions"><button class="button secondary" type="button" data-close-modal="profile-modal">Cancelar</button><button class="button primary" type="submit">Guardar cambios</button></div>
+      </form>
+    </dialog>
+
+    <dialog class="modal" id="guest-token-modal">
+      <form class="modal-card" id="guest-token-form">
+        <div class="modal-header"><div><p class="overline">Acceso Público</p><h2>Generar Enlace de Catálogo</h2></div><button class="icon-button" type="button" data-close-modal="guest-token-modal" aria-label="Cerrar">×</button></div>
+        <p class="admin-form-copy">Crea un enlace compartible para que clientes externos exploren el catálogo y soliciten cotizaciones.</p>
+        <div class="form-grid">
+          <label class="wide">Enlace generado
+            <div style="display:flex;gap:8px;margin-top:6px;">
+              <input id="guest-token-url" type="text" readonly style="background:#f6f9fc;font-family:ui-monospace,monospace;font-size:12px;" onclick="this.select()">
+              <button class="button secondary" type="button" id="copy-guest-url" style="white-space:nowrap;">Copiar</button>
+            </div>
+          </label>
+        </div>
+        <div id="guest-token-result" style="margin-top:16px;padding:16px;background:#eaf3fd;border-radius:10px;display:none;">
+          <strong style="color:#0b65ce;display:block;margin-bottom:8px;">Enlace listo para compartir:</strong>
+          <a id="guest-token-link" href="#" target="_blank" rel="noopener" style="color:#0b65ce;font-weight:750;word-break:break-all;"></a>
+          <p style="margin:12px 0 0;color:#64748b;font-size:12px;">Este enlace será válido por 30 días. Cualquier persona con este enlace podrá ver el catálogo y enviarte solicitudes de cotización.</p>
+        </div>
+        <div class="modal-actions"><button class="button secondary" type="button" data-close-modal="guest-token-modal">Cerrar</button><button class="button primary" type="submit">Generar nuevo enlace</button></div>
+      </form>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/js/app.js"></script>
+  </body>
+</html>
