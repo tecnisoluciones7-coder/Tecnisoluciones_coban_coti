@@ -522,6 +522,30 @@ function handleLogout(request, response) {
   });
 }
 
+function requerirAutenticacion(req, res, next) {
+  const session = req.session || esAdminAutenticado(req);
+  if (session) {
+    req.session = session;
+    return next();
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = url.pathname || '/';
+  const isApiRoute = pathname.startsWith('/api/');
+  const acceptsHtml = (req.headers.accept || '').includes('text/html');
+
+  if (isApiRoute) {
+    return sendJson(res, 401, { error: 'Acceso no autorizado' });
+  }
+
+  if (acceptsHtml || pathname === '/index.html' || pathname === '/index' || pathname === '/') {
+    res.writeHead(302, { Location: '/catalogo.html' });
+    return res.end();
+  }
+
+  return res.writeHead(302, { Location: '/catalogo.html' }) && res.end();
+}
+
 /**
  * Maneja el endpoint para crear admin POST /api/crear-admin
  * Requiere autenticación previa
@@ -788,6 +812,28 @@ async function createProduct(body) {
   return formatProduct(rows[0]);
 }
 
+async function updateProduct(id, body) {
+  const nombre = text(body.nombre, 180);
+  const descripcion = text(body.descripcion);
+  const precio = Number(body.precio);
+
+  if (!nombre || !Number.isFinite(precio) || precio <= 0) throw new Error('Indica nombre y precio válido para el producto.');
+
+  if (!pool) {
+    const data = localData();
+    const index = data.products.findIndex((item) => item.id === id);
+    if (index < 0) throw new Error('Producto no encontrado.');
+    data.products[index] = { ...data.products[index], nombre, descripcion, precio, actualizado_en: new Date().toISOString() };
+    saveLocalData(data);
+    return formatProduct(data.products[index]);
+  }
+
+  const [result] = await pool.execute('UPDATE productos SET nombre = ?, descripcion = ?, precio = ? WHERE id = ?', [nombre, descripcion || null, precio, id]);
+  if (!result.affectedRows) throw new Error('Producto no encontrado.');
+  const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, precio, creado_en, actualizado_en FROM productos WHERE id = ?', [id]);
+  return formatProduct(rows[0]);
+}
+
 async function deleteProduct(id) {
   if (!pool) {
     const data = localData();
@@ -1046,6 +1092,17 @@ async function route(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
   const segments = url.pathname.split('/').filter(Boolean);
   const id = integer(segments[2]);
+  request.session = esAdminAutenticado(request);
+
+  if (url.pathname === '/' && request.method === 'GET') {
+    response.writeHead(302, { Location: '/catalogo.html' });
+    return response.end();
+  }
+
+  if (url.pathname === '/index.html' || url.pathname === '/index') {
+    return requerirAutenticacion(request, response, () => serveStatic('/index.html', response));
+  }
+
   try {
     // Endpoint de salud (público)
     if (url.pathname === '/api/health' && request.method === 'GET') {
@@ -1072,14 +1129,13 @@ async function route(request, response) {
 
     if (segments[0] === 'api' && segments[1] === 'usuarios') {
       if (request.method === 'GET' && !id) {
-        return await handleListarUsuarios(request, response);
+        return requerirAutenticacion(request, response, async () => await handleListarUsuarios(request, response));
       }
       if (request.method === 'POST' && !id) {
-        if (!esAdminAutenticado(request)) return sendError(response, 403, 'No autorizado. Debes iniciar sesión como administrador.');
-        return await handleCrearAdmin(request, response);
+        return requerirAutenticacion(request, response, async () => await handleCrearAdmin(request, response));
       }
       if (request.method === 'PUT' && id) {
-        return await handleActualizarUsuario(request, response, id);
+        return requerirAutenticacion(request, response, async () => await handleActualizarUsuario(request, response, id));
       }
       return sendError(response, 405, 'Método no permitido para usuarios.');
     }
@@ -1097,22 +1153,15 @@ async function route(request, response) {
     
     // Rutas de API protegidas para métodos de modificación
     if (segments[0] === 'api' && segments[1] === 'productos') {
-      // POST requiere autenticación
       if (request.method === 'POST' && !id) {
-        if (!esAdminAutenticado(request)) {
-          return sendError(response, 403, 'No autorizado. Debes iniciar sesión.');
-        }
-        return sendJson(response, 201, await createProduct(await readBody(request)));
+        return requerirAutenticacion(request, response, async () => sendJson(response, 201, await createProduct(await readBody(request))));
       }
-      // DELETE requiere autenticación
+      if (request.method === 'PUT' && id) {
+        return requerirAutenticacion(request, response, async () => sendJson(response, 200, await updateProduct(id, await readBody(request))));
+      }
       if (request.method === 'DELETE' && id) {
-        if (!esAdminAutenticado(request)) {
-          return sendError(response, 403, 'No autorizado. Debes iniciar sesión.');
-        }
-        await deleteProduct(id);
-        return sendJson(response, 200, { ok: true });
+        return requerirAutenticacion(request, response, async () => { await deleteProduct(id); return sendJson(response, 200, { ok: true }); });
       }
-      // GET es público
       if (request.method === 'GET' && !id) {
         return sendJson(response, 200, await listProducts());
       }
