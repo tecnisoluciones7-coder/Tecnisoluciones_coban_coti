@@ -98,6 +98,10 @@ function renderProducts() {
   
   $('#product-list-guest').innerHTML = products.map((product) => `
     <article class="product-card">
+      <div class="product-chip-row">
+        <span class="product-code">${escapeHtml(product.codigo || 'SIN-CÓDIGO')}</span>
+        <span class="product-type">${escapeHtml(product.tipo || 'Producto')}</span>
+      </div>
       <h2>${escapeHtml(product.nombre)}</h2>
       <p>${escapeHtml(product.descripcion || 'Sin descripción.')}</p>
       <div class="product-bottom">

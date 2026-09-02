@@ -296,10 +296,14 @@ function closeModal(modalId) { const modal = $(`#${modalId}`); if (modal.open) m
 
 function renderProducts() {
   const query = $('#product-search').value.trim().toLocaleLowerCase();
-  const products = state.products.filter((product) => `${product.nombre} ${product.descripcion || ''}`.toLocaleLowerCase().includes(query));
+  const products = state.products.filter((product) => `${product.nombre} ${product.descripcion || ''} ${product.codigo || ''}`.toLocaleLowerCase().includes(query));
   $('#product-total').textContent = `${products.length} de ${state.products.length} productos`;
   $('#product-list').innerHTML = products.map((product) => `
     <article class="product-card">
+      <div class="product-chip-row">
+        <span class="product-code">${escapeHtml(product.codigo || 'SIN-CÓDIGO')}</span>
+        <span class="product-type">${escapeHtml(product.tipo || 'Producto')}</span>
+      </div>
       <h2>${escapeHtml(product.nombre)}</h2>
       <p>${escapeHtml(product.descripcion || 'Sin descripción.')}</p>
       <div class="product-bottom"><strong class="price">${formatMoney(product.precio)}</strong>
@@ -324,7 +328,16 @@ async function saveProduct(event) {
   event.preventDefault();
   const button = $('#product-form .primary'); button.disabled = true;
   try {
-    await api('/api/productos', { method: 'POST', body: JSON.stringify({ nombre: $('#product-name').value, descripcion: $('#product-description').value, precio: $('#product-price').value }) });
+    await api('/api/productos', {
+      method: 'POST',
+      body: JSON.stringify({
+        codigo: $('#product-code').value.trim(),
+        tipo: $('#product-type').value,
+        nombre: $('#product-name').value,
+        descripcion: $('#product-description').value,
+        precio: $('#product-price').value,
+      }),
+    });
     closeModal('product-modal'); await loadProducts(); notify('Producto agregado al catálogo.', 'success');
   } catch (error) { notify(error.message, 'error'); } finally { button.disabled = false; }
 }
@@ -404,7 +417,7 @@ async function handleQuoteAction(event) {
 }
 
 function openQuotePreview(quote) {
-  $('#quote-preview').innerHTML = `<div class="preview-top"><div><div class="preview-brand">TECNISOLUCIONES</div><span>Soluciones tecnológicas · Cotización comercial</span></div><div class="preview-code">${escapeHtml(quote.codigoCotizacion)}<br><small>${escapeHtml(quote.estado)}</small></div></div><div class="preview-client"><div><span class="preview-label">Cliente</span><strong>${escapeHtml(quote.clienteNombre)}</strong><br><span>${escapeHtml(quote.clienteTelefono || '')}</span></div><div><span class="preview-label">Fecha</span><strong>${formatDate(quote.fechaCotizacion)}</strong></div></div><table class="preview-items"><thead><tr><th>Producto</th><th class="center">Cant.</th><th class="right">Precio</th><th class="right">Subtotal</th></tr></thead><tbody>${quote.items.map((item) => `<tr><td>${escapeHtml(item.nombre)}</td><td class="center">${item.cantidad}</td><td class="right">${formatMoney(item.precioUnitario)}</td><td class="right">${formatMoney(item.subtotal)}</td></tr>`).join('')}</tbody></table><div class="preview-total">Total: ${formatMoney(quote.total)}</div>${quote.notas ? `<div class="preview-notes"><strong>Notas</strong><br>${escapeHtml(quote.notas)}</div>` : ''}<div class="preview-actions"><button class="button secondary" id="close-preview">Cerrar</button><button class="button primary" id="print-quote">Imprimir / Guardar PDF</button></div>`;
+  $('#quote-preview').innerHTML = `<div class="preview-top"><div><div class="preview-brand">TECNISOLUCIONES</div><span>Soluciones tecnológicas · Cotización comercial</span></div><div class="preview-code">${escapeHtml(quote.codigoCotizacion)}<br><small>${escapeHtml(quote.estado)}</small></div></div><div class="preview-client"><div><span class="preview-label">Cliente</span><strong>${escapeHtml(quote.clienteNombre)}</strong><br><span>${escapeHtml(quote.clienteTelefono || '')}</span></div><div><span class="preview-label">Fecha</span><strong>${formatDate(quote.fechaCotizacion)}</strong></div></div><table class="preview-items"><thead><tr><th>Producto</th><th class="center">Cant.</th><th class="right">Precio</th><th class="right">Subtotal</th></tr></thead><tbody>${quote.items.map((item) => `<tr><td><div>${escapeHtml(item.codigo || 'SIN-CÓDIGO')}</div><small>${escapeHtml(item.nombre)}</small></td><td class="center">${item.cantidad}</td><td class="right">${formatMoney(item.precioUnitario)}</td><td class="right">${formatMoney(item.subtotal)}</td></tr>`).join('')}</tbody></table><div class="preview-total">Total: ${formatMoney(quote.total)}</div>${quote.notas ? `<div class="preview-notes"><strong>Notas</strong><br>${escapeHtml(quote.notas)}</div>` : ''}<div class="preview-actions"><button class="button secondary" id="close-preview">Cerrar</button><button class="button primary" id="print-quote">Imprimir / Guardar PDF</button></div>`;
   const modal = $('#quote-preview-modal'); if (!modal.open) modal.showModal();
   $('#close-preview').addEventListener('click', () => modal.close()); $('#print-quote').addEventListener('click', () => window.print());
 }

@@ -5,6 +5,10 @@ const path = require('path');
 const { URL } = require('url');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const express = require('express');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const session = require('express-session');
 
 const ROOT = __dirname;
 
@@ -49,6 +53,64 @@ const sesionesActivas = new Map();
 
 // Duración de sesión en milisegundos (24 horas)
 const SESION_DURACION_MS = 24 * 60 * 60 * 1000;
+const LOGIN_RATE_LIMIT_MS = 15 * 60 * 1000;
+const LOGIN_RATE_LIMIT_MAX = 5;
+const loginAttempts = new Map();
+const expressApp = express();
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: 8 * 60 * 60 * 1000,
+};
+
+expressApp.use(helmet());
+expressApp.use(session({
+  secret: process.env.SESSION_SECRET || 'tecnisoluciones-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: sessionCookieOptions,
+}));
+
+const loginLimiter = rateLimit({
+  windowMs: LOGIN_RATE_LIMIT_MS,
+  max: LOGIN_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Demasiados intentos. Intenta nuevamente en unos minutos.' },
+});
+
+function applySecurityHeaders(response) {
+  const headers = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'X-XSS-Protection': '1; mode=block',
+    'Referrer-Policy': 'no-referrer',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none';",
+    'Cross-Origin-Opener-Policy': 'same-origin',
+  };
+  Object.entries(headers).forEach(([key, value]) => response.setHeader(key, value));
+}
+
+function getClientIp(request) {
+  const forwarded = request.headers['x-forwarded-for'];
+  if (forwarded) return String(forwarded).split(',')[0].trim();
+  return request.socket && request.socket.remoteAddress ? request.socket.remoteAddress : 'unknown';
+}
+
+function isLoginRateLimited(request) {
+  const ip = getClientIp(request);
+  const now = Date.now();
+  const attempts = (loginAttempts.get(ip) || []).filter((time) => now - time < LOGIN_RATE_LIMIT_MS);
+  loginAttempts.set(ip, attempts);
+  if (attempts.length >= LOGIN_RATE_LIMIT_MAX) {
+    return true;
+  }
+  attempts.push(now);
+  loginAttempts.set(ip, attempts);
+  return false;
+}
 
 /**
  * Carga usuarios desde archivo JSON local
@@ -454,6 +516,7 @@ function saveLocalData(data) {
 }
 
 function sendJson(response, status, data, headers = {}) {
+  applySecurityHeaders(response);
   const allHeaders = {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
@@ -475,6 +538,10 @@ async function handleLogin(request, response) {
     const body = await readBody(request);
     const { username, password } = body;
 
+    if (isLoginRateLimited(request)) {
+      return sendError(response, 429, 'Demasiados intentos. Intenta nuevamente en unos minutos.');
+    }
+
     if (!username || !password) {
       return sendError(response, 400, 'Debes proporcionar usuario (correo) y contraseña.');
     }
@@ -482,8 +549,12 @@ async function handleLogin(request, response) {
     // Validar credenciales
     const usuario = await validarCredenciales(String(username).trim().toLowerCase(), password);
     if (!usuario) {
+      const ip = getClientIp(request);
+      loginAttempts.set(ip, (loginAttempts.get(ip) || []).slice(-LOGIN_RATE_LIMIT_MAX + 1));
       return sendError(response, 401, 'Usuario o contraseña incorrectos.');
     }
+
+    loginAttempts.delete(getClientIp(request));
 
     // Generar token de sesión
     const token = generarTokenSesion();
@@ -495,7 +566,8 @@ async function handleLogin(request, response) {
       'HttpOnly',
       'Path=/',
       'SameSite=Lax',
-      `Max-Age=${Math.floor(SESION_DURACION_MS / 1000)}`,
+      `Max-Age=${8 * 60 * 60}`,
+      ...(process.env.NODE_ENV === 'production' ? ['Secure'] : []),
     ];
 
     return sendJson(response, 200, {
@@ -781,8 +853,30 @@ function dateOnly(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(source) ? source : new Date().toISOString().slice(0, 10);
 }
 
-function formatProduct(product) {
-  return { ...product, precio: Number(product.precio) };
+function resolveProductType(product = {}) {
+  const rawType = String(product.tipo || product.type || '').trim();
+  if (rawType === 'Servicio') return 'Servicio';
+  if (rawType === 'Producto') return 'Producto';
+  const codigo = String(product.codigo || '').trim();
+  if (codigo.startsWith('SRV-')) return 'Servicio';
+  return 'Producto';
+}
+
+function generateProductCode(product = {}, fallbackId = product.id || Date.now()) {
+  const id = Number(fallbackId || product.id || Date.now());
+  const prefix = resolveProductType(product) === 'Servicio' ? 'SRV' : 'PRD';
+  return `${prefix}-${String(id).padStart(3, '0')}`;
+}
+
+function formatProduct(product = {}) {
+  const tipo = resolveProductType(product);
+  const codigo = String(product.codigo || '').trim() || generateProductCode({ ...product, tipo }, product.id || Date.now());
+  return {
+    ...product,
+    codigo,
+    tipo,
+    precio: Number(product.precio),
+  };
 }
 
 function formatClient(client) {
@@ -790,48 +884,64 @@ function formatClient(client) {
 }
 
 async function listProducts() {
-  if (!pool) return localData().products.map(formatProduct).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  if (!pool) {
+    return localData().products.map((product) => formatProduct({ ...product, tipo: resolveProductType(product) })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  }
   const [rows] = await pool.query('SELECT id, codigo, nombre, descripcion, precio, creado_en, actualizado_en FROM productos ORDER BY nombre');
-  return rows.map(formatProduct);
+  return rows.map((product) => formatProduct({ ...product, tipo: resolveProductType(product) }));
 }
 
 async function createProduct(body) {
   const nombre = text(body.nombre, 180);
   const descripcion = text(body.descripcion);
   const precio = Number(body.precio);
-  const codigo = text(body.codigo, 50) || `PRD-${Date.now().toString().slice(-8)}`;
+  const tipo = text(body.tipo, 30) || 'Producto';
   if (!nombre || !Number.isFinite(precio) || precio <= 0) throw new Error('Indica nombre y precio válido para el producto.');
+
+  const tempProduct = { id: Date.now(), tipo, nombre };
+  const codigo = text(body.codigo, 50) || generateProductCode(tempProduct, Date.now());
+
   if (!pool) {
     const data = localData();
-    if (data.products.some((item) => item.codigo.toLowerCase() === codigo.toLowerCase())) throw new Error('El código de producto ya existe.');
-    const item = { id: nextId(data.products), codigo, nombre, descripcion, precio, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
+    if (data.products.some((item) => String(item.codigo || '').toLowerCase() === codigo.toLowerCase())) throw new Error('El código de producto ya existe.');
+    const item = { id: nextId(data.products), codigo, nombre, descripcion, tipo, precio, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
     data.products.push(item); saveLocalData(data); return formatProduct(item);
   }
   const [result] = await pool.execute('INSERT INTO productos (codigo, nombre, descripcion, precio) VALUES (?, ?, ?, ?)', [codigo, nombre, descripcion || null, precio]);
   const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, precio, creado_en, actualizado_en FROM productos WHERE id = ?', [result.insertId]);
-  return formatProduct(rows[0]);
+  return formatProduct({ ...rows[0], tipo });
 }
 
 async function updateProduct(id, body) {
   const nombre = text(body.nombre, 180);
   const descripcion = text(body.descripcion);
   const precio = Number(body.precio);
+  const tipo = text(body.tipo, 30) || 'Producto';
 
   if (!nombre || !Number.isFinite(precio) || precio <= 0) throw new Error('Indica nombre y precio válido para el producto.');
+
+  let existingProduct = null;
+  if (pool) {
+    const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, precio FROM productos WHERE id = ?', [id]);
+    existingProduct = rows[0] || null;
+  }
+
+  const baseCode = existingProduct && existingProduct.codigo ? existingProduct.codigo : generateProductCode({ id, tipo }, id || Date.now());
+  const codigo = text(body.codigo, 50) || baseCode;
 
   if (!pool) {
     const data = localData();
     const index = data.products.findIndex((item) => item.id === id);
     if (index < 0) throw new Error('Producto no encontrado.');
-    data.products[index] = { ...data.products[index], nombre, descripcion, precio, actualizado_en: new Date().toISOString() };
+    data.products[index] = { ...data.products[index], nombre, descripcion, codigo, tipo, precio, actualizado_en: new Date().toISOString() };
     saveLocalData(data);
     return formatProduct(data.products[index]);
   }
 
-  const [result] = await pool.execute('UPDATE productos SET nombre = ?, descripcion = ?, precio = ? WHERE id = ?', [nombre, descripcion || null, precio, id]);
+  const [result] = await pool.execute('UPDATE productos SET nombre = ?, descripcion = ?, precio = ?, codigo = ? WHERE id = ?', [nombre, descripcion || null, precio, codigo, id]);
   if (!result.affectedRows) throw new Error('Producto no encontrado.');
   const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, precio, creado_en, actualizado_en FROM productos WHERE id = ?', [id]);
-  return formatProduct(rows[0]);
+  return formatProduct({ ...rows[0], tipo });
 }
 
 async function deleteProduct(id) {
@@ -925,13 +1035,26 @@ async function getQuote(id) {
 }
 
 function validateQuote(body) {
-  const clienteId = integer(body.clienteId);
+  const clienteId = integer(body.clienteId ?? body.cliente_id);
   const items = Array.isArray(body.items) ? body.items : [];
+  const singleItem = body.id_producto ? [{ productoId: body.id_producto, cantidad: body.cantidad }] : [];
+  const normalizedItems = (items.length ? items : singleItem).map((item) => {
+    const productoId = integer(item.productoId ?? item.producto_id ?? item.id_producto ?? item.idProducto);
+    const cantidad = integer(item.cantidad ?? item.cant ?? item.quantity);
+    return { productoId, cantidad };
+  }).filter((item) => item.productoId && item.cantidad);
+
   if (!clienteId) throw new Error('Selecciona un cliente.');
-  if (!items.length) throw new Error('Agrega al menos un producto a la cotización.');
-  const normalized = items.map((item) => ({ productoId: integer(item.productoId), cantidad: integer(item.cantidad) })).filter((item) => item.productoId && item.cantidad);
-  if (normalized.length !== items.length) throw new Error('Hay un producto o una cantidad inválida.');
-  return { clienteId, fechaCotizacion: dateOnly(body.fechaCotizacion), estado: text(body.estado, 50) || 'Borrador', notas: text(body.notas), items: normalized };
+  if (!normalizedItems.length) throw new Error('Agrega al menos un producto a la cotización.');
+  const manoDeObra = Number(body.mano_de_obra ?? body.manoDeObra ?? 0);
+  return {
+    clienteId,
+    fechaCotizacion: dateOnly(body.fechaCotizacion),
+    estado: text(body.estado, 50) || 'Borrador',
+    notas: text(body.notas),
+    manoDeObra: Number.isFinite(manoDeObra) && manoDeObra >= 0 ? manoDeObra : 0,
+    items: normalizedItems,
+  };
 }
 
 function makeQuoteCode() {
@@ -951,10 +1074,11 @@ async function createQuote(body) {
     const productMap = new Map(products.map((product) => [product.id, product]));
     const details = input.items.map((item) => {
       const product = productMap.get(item.productoId);
-      const precioUnitario = Number(product.precio); const subtotal = precioUnitario * item.cantidad;
+      const precioUnitario = Number(product.precio);
+      const subtotal = precioUnitario * item.cantidad;
       return { ...item, ...product, precioUnitario, subtotal };
     });
-    const total = details.reduce((sum, item) => sum + item.subtotal, 0);
+    const total = details.reduce((sum, item) => sum + item.subtotal, 0) + Number(input.manoDeObra || 0);
     await connection.beginTransaction();
     const codigo = makeQuoteCode();
     const [result] = await connection.execute('INSERT INTO cotizaciones (codigo_cotizacion, cliente_id, fecha_cotizacion, estado, notas, total) VALUES (?, ?, ?, ?, ?, ?)', [codigo, input.clienteId, input.fechaCotizacion, input.estado, input.notas || null, total]);
@@ -973,9 +1097,10 @@ function createLocalQuote(input) {
   const details = input.items.map((item) => {
     const product = data.products.find((entry) => entry.id === item.productoId);
     if (!product) throw new Error('Uno de los productos ya no existe. Actualiza el catálogo.');
-    const precioUnitario = Number(product.precio); return { producto_id: product.id, codigo: product.codigo, nombre: product.nombre, cantidad: item.cantidad, precio_unitario: precioUnitario, subtotal: precioUnitario * item.cantidad };
+    const precioUnitario = Number(product.precio);
+    return { producto_id: product.id, codigo: product.codigo || generateProductCode(product, product.id), nombre: product.nombre, cantidad: item.cantidad, precio_unitario: precioUnitario, subtotal: precioUnitario * item.cantidad };
   });
-  const total = details.reduce((sum, item) => sum + item.subtotal, 0); const now = new Date().toISOString();
+  const total = details.reduce((sum, item) => sum + item.subtotal, 0) + Number(input.manoDeObra || 0); const now = new Date().toISOString();
   const row = { id: nextId(data.quotes), codigo_cotizacion: makeQuoteCode(), cliente_id: client.id, clienteNombre: client.nombre, clienteTelefono: client.telefono, fecha_cotizacion: input.fechaCotizacion, estado: input.estado, notas: input.notas, total, creadoEn: now, items: details };
   data.quotes.push(row); saveLocalData(data); return formatQuote(row, row.items);
 }
@@ -1111,7 +1236,9 @@ async function route(request, response) {
     
     // Endpoint de login (público)
     if (segments[0] === 'api' && segments[1] === 'login' && request.method === 'POST') {
-      return await handleLogin(request, response);
+      return loginLimiter(request, response, async () => {
+        await handleLogin(request, response);
+      });
     }
 
     if (segments[0] === 'api' && segments[1] === 'sesion' && request.method === 'GET') {
@@ -1266,6 +1393,7 @@ function resolvePublicPath(pathname) {
 }
 
 function serveStatic(pathname, response) {
+  applySecurityHeaders(response);
   const requested = resolvePublicPath(pathname);
   const filePath = path.resolve(PUBLIC_DIR, requested);
   if (!filePath.startsWith(`${PUBLIC_DIR}${path.sep}`) && filePath !== path.join(PUBLIC_DIR, 'index.html')) return sendError(response, 403, 'Acceso denegado.');
@@ -1277,7 +1405,7 @@ function serveStatic(pathname, response) {
       return sendError(response, 404, 'Página no encontrada.');
     }
     const type = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.svg': 'image/svg+xml' }[path.extname(filePath)] || 'application/octet-stream';
-    response.writeHead(200, { 'Content-Type': type }); response.end(content);
+    response.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' }); response.end(content);
   });
 }
 
