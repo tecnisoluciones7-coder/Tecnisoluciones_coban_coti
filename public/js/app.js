@@ -372,8 +372,8 @@ async function saveProduct(event) {
         tipo: $('#tipo').value,
         nombre: $('#product-name').value,
         descripcion: $('#product-description').value,
-        precio: $('#product-price').value,
-        stock: $('#product-stock').value,
+        precio: Number($('#product-price').value),
+        stock: Number($('#product-stock').value),
       }),
     });
     closeModal('product-modal'); await loadProducts(); notify(isEdit ? 'Producto actualizado.' : 'Producto agregado al catálogo.', 'success');
