@@ -420,7 +420,9 @@ async function createTables() {
       codigo VARCHAR(50) NOT NULL,
       nombre VARCHAR(180) NOT NULL,
       descripcion TEXT NULL,
+      tipo VARCHAR(30) NOT NULL DEFAULT 'Producto',
       precio DECIMAL(10,2) NOT NULL,
+      stock INT UNSIGNED NOT NULL DEFAULT 0,
       creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id), UNIQUE KEY uq_productos_codigo (codigo), KEY idx_productos_nombre (nombre)
@@ -472,6 +474,8 @@ async function createTables() {
   try {
     await pool.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nombre VARCHAR(120) NOT NULL DEFAULT "Administrador"');
     await pool.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol VARCHAR(40) NOT NULL DEFAULT "Administrador"');
+    await pool.query("ALTER TABLE productos ADD COLUMN IF NOT EXISTS tipo VARCHAR(30) NOT NULL DEFAULT 'Producto'");
+    await pool.query('ALTER TABLE productos ADD COLUMN IF NOT EXISTS stock INT UNSIGNED NOT NULL DEFAULT 0');
   } catch {
     // Este ajuste es compatible con versiones que ya tengan la columna.
   }
@@ -479,12 +483,12 @@ async function createTables() {
 
 function defaultProducts() {
   return [
-    ['CAM-DAH-2MP', 'Cámara Dahua 2MP', 'Cámara HD con visión nocturna y protección IP67.', 350],
-    ['CAM-HIK-4MP', 'Cámara Hikvision 4MP', 'Cámara IP con detección inteligente y compresión H.265+.', 375],
-    ['DVR-8CH', 'DVR 8 canales', 'Grabador digital con acceso remoto y soporte para disco duro.', 850],
-    ['NVR-4POE', 'NVR 4 canales PoE', 'Grabador IP con PoE integrado y resolución de hasta 8 MP.', 950],
-    ['BAL-UTP', 'Video balun (par)', 'Transmisor y receptor de video por cable UTP Cat5e.', 45],
-    ['INS-CCTV', 'Servicio de instalación', 'Instalación, canaleta, fijaciones y configuración del sistema.', 600],
+    ['CAM-DAH-2MP', 'Cámara Dahua 2MP', 'Cámara HD con visión nocturna y protección IP67.', 350, 'Producto', 10],
+    ['CAM-HIK-4MP', 'Cámara Hikvision 4MP', 'Cámara IP con detección inteligente y compresión H.265+.', 375, 'Producto', 10],
+    ['DVR-8CH', 'DVR 8 canales', 'Grabador digital con acceso remoto y soporte para disco duro.', 850, 'Producto', 10],
+    ['NVR-4POE', 'NVR 4 canales PoE', 'Grabador IP con PoE integrado y resolución de hasta 8 MP.', 950, 'Producto', 10],
+    ['BAL-UTP', 'Video balun (par)', 'Transmisor y receptor de video por cable UTP Cat5e.', 45, 'Producto', 10],
+    ['INS-CCTV', 'Servicio de instalación', 'Instalación, canaleta, fijaciones y configuración del sistema.', 600, 'Servicio', 0],
   ];
 }
 
@@ -492,7 +496,7 @@ async function seedProducts() {
   const [rows] = await pool.query('SELECT COUNT(*) AS total FROM productos');
   if (Number(rows[0].total) > 0) return;
   for (const product of defaultProducts()) {
-    await pool.execute('INSERT INTO productos (codigo, nombre, descripcion, precio) VALUES (?, ?, ?, ?)', product);
+    await pool.execute('INSERT INTO productos (codigo, nombre, descripcion, precio, tipo, stock) VALUES (?, ?, ?, ?, ?, ?)', product);
   }
 }
 
@@ -500,8 +504,8 @@ function ensureFallbackData() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (fs.existsSync(FALLBACK_FILE)) return;
   const now = new Date().toISOString();
-  const products = defaultProducts().map(([codigo, nombre, descripcion, precio], index) => ({
-    id: index + 1, codigo, nombre, descripcion, precio, creado_en: now, actualizado_en: now,
+  const products = defaultProducts().map(([codigo, nombre, descripcion, precio, tipo, stock], index) => ({
+    id: index + 1, codigo, nombre, descripcion, precio, tipo, stock, creado_en: now, actualizado_en: now,
   }));
   fs.writeFileSync(FALLBACK_FILE, JSON.stringify({ clients: [], products, quotes: [], guestTokens: [] }, null, 2));
 }
@@ -732,6 +736,39 @@ async function handleActualizarUsuario(request, response, id) {
 }
 
 /**
+ * Permite a cada administrador actualizar únicamente su propia contraseña.
+ * PUT /api/usuarios/password
+ */
+async function handleActualizarPassword(request, response) {
+  const sesion = request.session || esAdminAutenticado(request);
+  if (!sesion || !sesion.usuario) return sendJson(response, 401, { error: 'Acceso no autorizado' });
+
+  const body = await readBody(request);
+  const usuarioId = parseInt(body.id_usuario, 10);
+
+  if (Number(sesion.usuario.id) !== usuarioId) {
+    return sendJson(response, 403, { error: 'No tienes permiso para modificar la contraseña de otro administrador.' });
+  }
+
+  const password = String(body.password || body.nueva_password || body.nuevaPassword || '').trim();
+  if (password.length < 6) return sendError(response, 400, 'La contraseña debe tener al menos 6 caracteres.');
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  if (pool && databaseMode === 'mysql') {
+    const [result] = await pool.execute('UPDATE usuarios SET password_hash = ? WHERE id = ?', [passwordHash, usuarioId]);
+    if (!result.affectedRows) return sendError(response, 404, 'Usuario no encontrado.');
+  } else {
+    const usuarios = cargarUsuariosJSON();
+    const index = usuarios.findIndex((usuario) => Number(usuario.id) === usuarioId);
+    if (index < 0) return sendError(response, 404, 'Usuario no encontrado.');
+    usuarios[index] = { ...usuarios[index], password_hash: passwordHash };
+    guardarUsuariosJSON(usuarios);
+  }
+
+  return sendJson(response, 200, { ok: true, mensaje: 'Contraseña actualizada correctamente.' });
+}
+
+/**
  * Genera un token de invitado para acceso público al catálogo
  * POST /api/guest/token
  */
@@ -844,6 +881,11 @@ function integer(value) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function nonNegativeInteger(value) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function text(value, maxLength = 65535) {
   return String(value ?? '').trim().slice(0, maxLength);
 }
@@ -876,6 +918,7 @@ function formatProduct(product = {}) {
     codigo,
     tipo,
     precio: Number(product.precio),
+    stock: Number.isSafeInteger(Number(product.stock)) && Number(product.stock) >= 0 ? Number(product.stock) : 0,
   };
 }
 
@@ -887,16 +930,17 @@ async function listProducts() {
   if (!pool) {
     return localData().products.map((product) => formatProduct({ ...product, tipo: resolveProductType(product) })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }
-  const [rows] = await pool.query('SELECT id, codigo, nombre, descripcion, precio, creado_en, actualizado_en FROM productos ORDER BY nombre');
-  return rows.map((product) => formatProduct({ ...product, tipo: resolveProductType(product) }));
+  const [rows] = await pool.query('SELECT id, codigo, nombre, descripcion, tipo, precio, stock, creado_en, actualizado_en FROM productos ORDER BY nombre');
+  return rows.map(formatProduct);
 }
 
 async function createProduct(body) {
   const nombre = text(body.nombre, 180);
   const descripcion = text(body.descripcion);
   const precio = Number(body.precio);
-  const tipo = text(body.tipo, 30) || 'Producto';
-  if (!nombre || !Number.isFinite(precio) || precio <= 0) throw new Error('Indica nombre y precio válido para el producto.');
+  const tipo = text(body.tipo, 30) === 'Servicio' ? 'Servicio' : 'Producto';
+  const stock = nonNegativeInteger(body.stock);
+  if (!nombre || !Number.isFinite(precio) || precio <= 0 || stock === null) throw new Error('Indica nombre, precio y stock válidos para el producto.');
 
   const tempProduct = { id: Date.now(), tipo, nombre };
   const codigo = text(body.codigo, 50) || generateProductCode(tempProduct, Date.now());
@@ -904,25 +948,26 @@ async function createProduct(body) {
   if (!pool) {
     const data = localData();
     if (data.products.some((item) => String(item.codigo || '').toLowerCase() === codigo.toLowerCase())) throw new Error('El código de producto ya existe.');
-    const item = { id: nextId(data.products), codigo, nombre, descripcion, tipo, precio, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
+    const item = { id: nextId(data.products), codigo, nombre, descripcion, tipo, precio, stock, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
     data.products.push(item); saveLocalData(data); return formatProduct(item);
   }
-  const [result] = await pool.execute('INSERT INTO productos (codigo, nombre, descripcion, precio) VALUES (?, ?, ?, ?)', [codigo, nombre, descripcion || null, precio]);
-  const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, precio, creado_en, actualizado_en FROM productos WHERE id = ?', [result.insertId]);
-  return formatProduct({ ...rows[0], tipo });
+  const [result] = await pool.execute('INSERT INTO productos (codigo, nombre, descripcion, tipo, precio, stock) VALUES (?, ?, ?, ?, ?, ?)', [codigo, nombre, descripcion || null, tipo, precio, stock]);
+  const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, tipo, precio, stock, creado_en, actualizado_en FROM productos WHERE id = ?', [result.insertId]);
+  return formatProduct(rows[0]);
 }
 
 async function updateProduct(id, body) {
   const nombre = text(body.nombre, 180);
   const descripcion = text(body.descripcion);
   const precio = Number(body.precio);
-  const tipo = text(body.tipo, 30) || 'Producto';
+  const tipo = text(body.tipo, 30) === 'Servicio' ? 'Servicio' : 'Producto';
+  const stock = nonNegativeInteger(body.stock);
 
-  if (!nombre || !Number.isFinite(precio) || precio <= 0) throw new Error('Indica nombre y precio válido para el producto.');
+  if (!nombre || !Number.isFinite(precio) || precio <= 0 || stock === null) throw new Error('Indica nombre, precio y stock válidos para el producto.');
 
   let existingProduct = null;
   if (pool) {
-    const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, precio FROM productos WHERE id = ?', [id]);
+    const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, tipo, precio, stock FROM productos WHERE id = ?', [id]);
     existingProduct = rows[0] || null;
   }
 
@@ -933,15 +978,15 @@ async function updateProduct(id, body) {
     const data = localData();
     const index = data.products.findIndex((item) => item.id === id);
     if (index < 0) throw new Error('Producto no encontrado.');
-    data.products[index] = { ...data.products[index], nombre, descripcion, codigo, tipo, precio, actualizado_en: new Date().toISOString() };
+    data.products[index] = { ...data.products[index], nombre, descripcion, codigo, tipo, precio, stock, actualizado_en: new Date().toISOString() };
     saveLocalData(data);
     return formatProduct(data.products[index]);
   }
 
-  const [result] = await pool.execute('UPDATE productos SET nombre = ?, descripcion = ?, precio = ?, codigo = ? WHERE id = ?', [nombre, descripcion || null, precio, codigo, id]);
+  const [result] = await pool.execute('UPDATE productos SET nombre = ?, tipo = ?, precio = ?, stock = ?, descripcion = ?, codigo = ? WHERE id = ?', [nombre, tipo, precio, stock, descripcion || null, codigo, id]);
   if (!result.affectedRows) throw new Error('Producto no encontrado.');
-  const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, precio, creado_en, actualizado_en FROM productos WHERE id = ?', [id]);
-  return formatProduct({ ...rows[0], tipo });
+  const [rows] = await pool.execute('SELECT id, codigo, nombre, descripcion, tipo, precio, stock, creado_en, actualizado_en FROM productos WHERE id = ?', [id]);
+  return formatProduct(rows[0]);
 }
 
 async function deleteProduct(id) {
@@ -1255,6 +1300,9 @@ async function route(request, response) {
     }
 
     if (segments[0] === 'api' && segments[1] === 'usuarios') {
+      if (segments[2] === 'password' && request.method === 'PUT') {
+        return requerirAutenticacion(request, response, async () => await handleActualizarPassword(request, response));
+      }
       if (request.method === 'GET' && !id) {
         return requerirAutenticacion(request, response, async () => await handleListarUsuarios(request, response));
       }
