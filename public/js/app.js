@@ -42,6 +42,7 @@ function bindEvents() {
   document.querySelectorAll('[data-close-modal]').forEach((button) => button.addEventListener('click', () => closeModal(button.dataset.closeModal)));
   $('#product-search').addEventListener('input', renderProducts);
   $('#product-form').addEventListener('submit', saveProduct);
+  $('#tipo').addEventListener('change', handleProductTypeChange);
   $('#clear-cart').addEventListener('click', clearCart);
   $('#save-quote').addEventListener('click', saveQuote);
   $('#refresh-quotes').addEventListener('click', loadQuotes);
@@ -287,7 +288,13 @@ function showSection(section) {
 }
 
 function openModal(modalId) {
-  if (modalId === 'product-modal') $('#product-form').reset();
+  if (modalId === 'product-modal') {
+    $('#product-form').reset();
+    delete $('#product-form').dataset.editId;
+    $('#product-modal h2').textContent = 'Nuevo producto';
+    $('#product-modal .primary').textContent = 'Guardar producto';
+    handleProductTypeChange();
+  }
   const modal = $(`#${modalId}`);
   if (!modal.open) modal.showModal();
 }
@@ -307,7 +314,7 @@ function renderProducts() {
       <h2>${escapeHtml(product.nombre)}</h2>
       <p>${escapeHtml(product.descripcion || 'Sin descripción.')}</p>
       <div class="product-bottom"><strong class="price">${formatMoney(product.precio)}</strong>
-        <div class="card-actions"><button class="small-button add" data-action="add" data-id="${product.id}">Agregar</button><button class="small-button danger" data-action="delete" data-id="${product.id}" title="Eliminar producto">Eliminar</button></div>
+        <div class="card-actions"><button class="small-button add" data-action="add" data-id="${product.id}">Agregar</button><button class="small-button" data-action="edit" data-id="${product.id}">Editar</button><button class="small-button danger" data-action="delete" data-id="${product.id}" title="Eliminar producto">Eliminar</button></div>
       </div>
     </article>`).join('');
   $('#product-empty').classList.toggle('hidden', products.length > 0);
@@ -317,6 +324,7 @@ async function handleProductAction(event) {
   const button = event.target.closest('[data-action]'); if (!button) return;
   const id = Number(button.dataset.id); const product = state.products.find((item) => item.id === id); if (!product) return;
   if (button.dataset.action === 'add') { addToCart(product); return; }
+  if (button.dataset.action === 'edit') { openEditProductModal(product); return; }
   if (button.dataset.action === 'delete') {
     if (!confirm(`¿Eliminar “${product.nombre}” del catálogo?`)) return;
     try { await api(`/api/productos/${id}`, { method: 'DELETE' }); state.cart = state.cart.filter((item) => item.productoId !== id); await loadProducts(); notify('Producto eliminado.', 'success'); }
@@ -324,21 +332,51 @@ async function handleProductAction(event) {
   }
 }
 
+function openEditProductModal(product) {
+  $('#product-code').value = product.codigo || '';
+  $('#tipo').value = product.tipo || 'Producto';
+  $('#product-name').value = product.nombre || '';
+  $('#product-price').value = product.precio || '';
+  $('#product-stock').value = product.stock !== undefined ? product.stock : 0;
+  $('#product-description').value = product.descripcion || '';
+  $('#product-form').dataset.editId = product.id;
+  $('#product-modal h2').textContent = 'Editar producto';
+  $('#product-modal .primary').textContent = 'Actualizar producto';
+  handleProductTypeChange();
+  $('#product-modal').showModal();
+}
+
+function handleProductTypeChange() {
+  const isServicio = $('#tipo').value === 'Servicio';
+  const stockInput = $('#product-stock');
+  if (isServicio) {
+    stockInput.value = 0;
+    stockInput.disabled = true;
+  } else {
+    stockInput.disabled = false;
+  }
+}
+
 async function saveProduct(event) {
   event.preventDefault();
   const button = $('#product-form .primary'); button.disabled = true;
   try {
-    await api('/api/productos', {
-      method: 'POST',
+    const isEdit = !!$('#product-form').dataset.editId;
+    const url = isEdit ? `/api/productos/${$('#product-form').dataset.editId}` : '/api/productos';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    await api(url, {
+      method,
       body: JSON.stringify({
         codigo: $('#product-code').value.trim(),
-        tipo: $('#product-type').value,
+        tipo: $('#tipo').value,
         nombre: $('#product-name').value,
         descripcion: $('#product-description').value,
         precio: $('#product-price').value,
+        stock: $('#product-stock').value,
       }),
     });
-    closeModal('product-modal'); await loadProducts(); notify('Producto agregado al catálogo.', 'success');
+    closeModal('product-modal'); await loadProducts(); notify(isEdit ? 'Producto actualizado.' : 'Producto agregado al catálogo.', 'success');
   } catch (error) { notify(error.message, 'error'); } finally { button.disabled = false; }
 }
 

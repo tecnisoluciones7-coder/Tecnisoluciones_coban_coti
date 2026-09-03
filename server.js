@@ -615,11 +615,11 @@ function requerirAutenticacion(req, res, next) {
   }
 
   if (acceptsHtml || pathname === '/index.html' || pathname === '/index' || pathname === '/') {
-    res.writeHead(302, { Location: '/catalogo.html' });
+    res.writeHead(302, { Location: '/index.html' });
     return res.end();
   }
 
-  return res.writeHead(302, { Location: '/catalogo.html' }) && res.end();
+  return res.writeHead(302, { Location: '/index.html' }) && res.end();
 }
 
 /**
@@ -688,12 +688,17 @@ async function handleActualizarUsuario(request, response, id) {
 
   const usuarioId = Number(id);
   if (!Number.isInteger(usuarioId) || usuarioId <= 0) return sendError(response, 400, 'ID de usuario inválido.');
-  if (usuarioId !== Number(sesion.usuario.id)) return sendError(response, 403, 'Solo puedes actualizar tu propio perfil.');
-
   const body = await readBody(request);
   const nombre = String(body.name || body.nombre || '').trim();
   const correo = String(body.email || body.correo || body.username || '').trim().toLowerCase();
   const password = body.password ? String(body.password).trim() : '';
+
+  if (usuarioId !== Number(sesion.usuario.id)) {
+    if (password) {
+      return sendError(response, 403, 'No tienes permiso para modificar la contraseña de otro administrador.');
+    }
+    return sendError(response, 403, 'Solo puedes actualizar tu propio perfil.');
+  }
 
   if (!nombre) return sendError(response, 400, 'El nombre completo es obligatorio.');
   if (!correo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return sendError(response, 400, 'El correo no es válido.');
@@ -904,15 +909,15 @@ function resolveProductType(product = {}) {
   return 'Producto';
 }
 
-function generateProductCode(product = {}, fallbackId = product.id || Date.now()) {
-  const id = Number(fallbackId || product.id || Date.now());
+function generateProductCode(product = {}, fallbackId = product.id) {
+  const id = Number(fallbackId || product.id || 0);
   const prefix = resolveProductType(product) === 'Servicio' ? 'SRV' : 'PRD';
   return `${prefix}-${String(id).padStart(3, '0')}`;
 }
 
 function formatProduct(product = {}) {
   const tipo = resolveProductType(product);
-  const codigo = String(product.codigo || '').trim() || generateProductCode({ ...product, tipo }, product.id || Date.now());
+  const codigo = String(product.codigo || '').trim() || generateProductCode({ ...product, tipo }, product.id);
   return {
     ...product,
     codigo,
@@ -939,16 +944,24 @@ async function createProduct(body) {
   const descripcion = text(body.descripcion);
   const precio = Number(body.precio);
   const tipo = text(body.tipo, 30) === 'Servicio' ? 'Servicio' : 'Producto';
-  const stock = nonNegativeInteger(body.stock);
+  const stock = tipo === 'Servicio' ? 0 : nonNegativeInteger(body.stock);
   if (!nombre || !Number.isFinite(precio) || precio <= 0 || stock === null) throw new Error('Indica nombre, precio y stock válidos para el producto.');
 
-  const tempProduct = { id: Date.now(), tipo, nombre };
-  const codigo = text(body.codigo, 50) || generateProductCode(tempProduct, Date.now());
+  let nextProductId = 1;
+  if (pool) {
+    const [rowsId] = await pool.query('SELECT COUNT(*) + 1 AS nextId FROM productos');
+    nextProductId = Number(rowsId[0].nextId);
+  } else {
+    nextProductId = localData().products.length + 1;
+  }
+
+  const formattedNumber = String(nextProductId).padStart(3, '0');
+  const codigo = tipo === 'Servicio' ? `SRV-${formattedNumber}` : `PRD-${formattedNumber}`;
 
   if (!pool) {
     const data = localData();
     if (data.products.some((item) => String(item.codigo || '').toLowerCase() === codigo.toLowerCase())) throw new Error('El código de producto ya existe.');
-    const item = { id: nextId(data.products), codigo, nombre, descripcion, tipo, precio, stock, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
+    const item = { id: nextProductId, codigo, nombre, descripcion, tipo, precio, stock, creado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() };
     data.products.push(item); saveLocalData(data); return formatProduct(item);
   }
   const [result] = await pool.execute('INSERT INTO productos (codigo, nombre, descripcion, tipo, precio, stock) VALUES (?, ?, ?, ?, ?, ?)', [codigo, nombre, descripcion || null, tipo, precio, stock]);
@@ -961,7 +974,7 @@ async function updateProduct(id, body) {
   const descripcion = text(body.descripcion);
   const precio = Number(body.precio);
   const tipo = text(body.tipo, 30) === 'Servicio' ? 'Servicio' : 'Producto';
-  const stock = nonNegativeInteger(body.stock);
+  const stock = tipo === 'Servicio' ? 0 : nonNegativeInteger(body.stock);
 
   if (!nombre || !Number.isFinite(precio) || precio <= 0 || stock === null) throw new Error('Indica nombre, precio y stock válidos para el producto.');
 
@@ -971,7 +984,7 @@ async function updateProduct(id, body) {
     existingProduct = rows[0] || null;
   }
 
-  const baseCode = existingProduct && existingProduct.codigo ? existingProduct.codigo : generateProductCode({ id, tipo }, id || Date.now());
+  const baseCode = existingProduct && existingProduct.codigo ? existingProduct.codigo : generateProductCode({ id, tipo }, id);
   const codigo = text(body.codigo, 50) || baseCode;
 
   if (!pool) {
@@ -1265,12 +1278,12 @@ async function route(request, response) {
   request.session = esAdminAutenticado(request);
 
   if (url.pathname === '/' && request.method === 'GET') {
-    response.writeHead(302, { Location: '/catalogo.html' });
+    response.writeHead(302, { Location: '/index.html' });
     return response.end();
   }
 
   if (url.pathname === '/index.html' || url.pathname === '/index') {
-    return requerirAutenticacion(request, response, () => serveStatic('/index.html', response));
+    return serveStatic('/index.html', response);
   }
 
   try {
