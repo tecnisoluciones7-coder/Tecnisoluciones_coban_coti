@@ -57,6 +57,7 @@ const LOGIN_RATE_LIMIT_MS = 15 * 60 * 1000;
 const LOGIN_RATE_LIMIT_MAX = 5;
 const loginAttempts = new Map();
 const expressApp = express();
+expressApp.set('trust proxy', 1 /* Confía en el primer proxy (Cloudflare) */);
 const sessionCookieOptions = {
   httpOnly: true,
   sameSite: 'lax',
