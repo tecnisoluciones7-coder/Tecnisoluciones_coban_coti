@@ -102,5 +102,21 @@ dialog.modal { width:min(560px,calc(100vw - 28px)); max-width:none; padding:0; b
   .form-grid,.preview-client { grid-template-columns:1fr; }
   .wide { grid-column:auto; }
   .quote-total strong { font-size:24px; }
+  
+  /* --- Mejoras Específicas para Móviles --- */
+  /* 1. Prevenir el zoom automático en iOS (Safari) al enfocar campos */
+  input, textarea, select, .login-card input { font-size: 16px !important; }
+  
+  /* 2. Ampliar áreas táctiles (Touch Targets) recomendadas a ~44px */
+  .quantity-control button { width: 38px; height: 38px; font-size: 16px; border-radius: 9px; }
+  .icon-button { width: 44px; height: 44px; }
+  
+  /* 3. Ajustar márgenes en modales para no desperdiciar espacio en pantallas pequeñas */
+  .modal-card { padding: 20px 16px; }
+  .modal-header { margin-bottom: 16px; }
+  
+  /* 4. Mejorar el espaciado de las tablas con scroll horizontal */
+  .table-wrap th { padding: 12px 10px; }
+  .table-wrap td { padding: 14px 10px; }
 }
 @media print { body { background:#fff; }.topbar,.page,.toast { display:none!important; } dialog#quote-preview-modal { position:static; display:block; width:100%!important; max-width:none!important; overflow:visible; box-shadow:none; } dialog#quote-preview-modal::backdrop { display:none; }.quote-preview { max-height:none; overflow:visible; padding:0; }.preview-actions { display:none; } }
