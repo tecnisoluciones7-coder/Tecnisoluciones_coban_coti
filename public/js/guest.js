@@ -104,6 +104,9 @@ function renderProducts() {
       </div>
       <h2>${escapeHtml(product.nombre)}</h2>
       <p>${escapeHtml(product.descripcion || 'Sin descripción.')}</p>
+      <p style="font-size: 13px; color: #64748b; margin-bottom: 8px; font-weight: 600;">
+        ${product.tipo === 'Servicio' ? 'Stock: N/A' : `Stock: ${product.stock !== undefined ? product.stock : 0}`}
+      </p>
       <div class="product-bottom">
         <strong class="price">${formatMoney(product.precio)}</strong>
         <div class="card-actions">
@@ -228,7 +231,7 @@ async function submitGuestQuote(event) {
   button.disabled = true;
   
   const quoteData = {
-    clienteNombre: $('#guest-client-name').value,
+    clienteNombre: "Solicitud Web - Cliente", // Nombre genérico automático
     clienteTelefono: $('#guest-client-phone').value,
     clienteEmail: $('#guest-client-email').value,
     clienteDireccion: $('#guest-client-address').value,
@@ -246,6 +249,17 @@ async function submitGuestQuote(event) {
       body: JSON.stringify(quoteData)
     });
     
+    const total = state.cart.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+    let mensaje = "Hola, me interesa solicitar la siguiente cotización:\n\n";
+    state.cart.forEach(item => {
+      const subtotal = item.precio * item.cantidad;
+      mensaje += `- ${item.cantidad}x ${item.nombre} - ${formatMoney(subtotal)}\n`;
+    });
+    mensaje += `\nTotal: ${formatMoney(total)}`;
+
+    const urlWhatsApp = `https://wa.me/50249397276?text=${encodeURIComponent(mensaje)}`;
+    window.open(urlWhatsApp, '_blank');
+
     $('#quote-success-modal').showModal();
     state.cart = [];
     renderCart();

@@ -384,10 +384,10 @@
       }
 
       function inferCategory(product) {
+        if (product.tipo === 'Servicio') return 'Servicios';
+        
         const text = `${product.nombre || ''} ${product.descripcion || ''}`.toLowerCase();
-        if (/(dvr|nvr|grabador|cámara|camara|video|ip|hd|vision|ptz)/.test(text)) return 'Cámaras y grabación';
         if (/(router|switch|red|conectividad|poe|ethernet|acceso)/.test(text)) return 'Red y conectividad';
-        if (/(servicio|instal|config|mantenimiento|soporte|automat)/.test(text)) return 'Servicios';
         if (/(balun|cable|fuente|kit|accesorio|montaje)/.test(text)) return 'Accesorios';
         return 'Productos';
       }
@@ -406,6 +406,9 @@
           <article class="catalog-item">
             <h2>${escapeHtml(product.nombre)}</h2>
             <p>${escapeHtml(product.descripcion || 'Sin descripción.')}</p>
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 8px;">
+              ${product.tipo === 'Servicio' ? 'Stock: N/A' : `Stock: ${product.stock !== undefined ? product.stock : 0}`}
+            </p>
             <div class="catalog-item-footer">
               <strong class="catalog-item-price">${formatMoney(product.precio)}</strong>
               <button class="small-button add" data-action="add" data-id="${product.id}">Agregar</button>
@@ -477,7 +480,7 @@
         `).join('');
       }
 
-      function submitQuoteRequest(event) {
+      async function submitQuoteRequest(event) {
         event.preventDefault();
 
         if (!state.cart.length) {
@@ -493,6 +496,32 @@
           notify('Completa nombre y correo para continuar.', 'error');
           return;
         }
+
+        try {
+          await fetch('/api/cotizaciones/guest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clienteNombre: "Solicitud Web - Cliente",
+              clienteEmail: email,
+              notas: notes,
+              items: state.cart.map(item => ({ productoId: item.productoId, cantidad: item.cantidad }))
+            })
+          });
+        } catch (error) {
+          console.error("Error al guardar en el historial:", error);
+        }
+
+        const total = state.cart.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+        let mensaje = "Hola, me interesa solicitar la siguiente cotización:\n\n";
+        state.cart.forEach(item => {
+          const subtotal = item.precio * item.cantidad;
+          mensaje += `- ${item.cantidad}x ${item.nombre} - ${formatMoney(subtotal)}\n`;
+        });
+        mensaje += `\nTotal: ${formatMoney(total)}`;
+
+        const urlWhatsApp = `https://wa.me/50249397276?text=${encodeURIComponent(mensaje)}`;
+        window.open(urlWhatsApp, '_blank');
 
         notify(`Gracias ${name}. Un asesor revisará tu cotización y se pondrá en contacto contigo.`, 'success');
         event.target.reset();
