@@ -79,6 +79,7 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Demasiados intentos. Intenta nuevamente en unos minutos.' },
+  keyGenerator: (req) => getClientIp(req),
 });
 
 function applySecurityHeaders(response) {
@@ -946,7 +947,7 @@ async function createProduct(body) {
   const precio = Number(body.precio);
   const tipo = text(body.tipo, 30) === 'Servicio' ? 'Servicio' : 'Producto';
   const stock = tipo === 'Servicio' ? 0 : nonNegativeInteger(body.stock);
-  if (!nombre || !Number.isFinite(precio) || precio <= 0 || stock === null) throw new Error('Indica nombre, precio y stock válidos para el producto.');
+  if (!nombre || !Number.isFinite(precio) || precio <= 0) throw new Error('Indica nombre y precio válidos para el producto.');
 
   let nextProductId = 1;
   if (pool) {
@@ -977,7 +978,7 @@ async function updateProduct(id, body) {
   const tipo = text(body.tipo, 30) === 'Servicio' ? 'Servicio' : 'Producto';
   const stock = tipo === 'Servicio' ? 0 : nonNegativeInteger(body.stock);
 
-  if (!nombre || !Number.isFinite(precio) || precio <= 0 || stock === null) throw new Error('Indica nombre, precio y stock válidos para el producto.');
+  if (!nombre || !Number.isFinite(precio) || precio <= 0) throw new Error('Indica nombre y precio válidos para el producto.');
 
   let existingProduct = null;
   if (pool) {
