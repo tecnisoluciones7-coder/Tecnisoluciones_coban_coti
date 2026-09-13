@@ -498,7 +498,7 @@
         }
 
         const quoteData = {
-          clienteNombre: `Solicitud Web - ${name || 'Cliente'}`,
+          clienteNombre: `Solicitud Web - ${$('#catalog-client-name')?.value || 'Cliente'}`,
           clienteTelefono: $('#catalog-client-phone')?.value || '',
           clienteEmail: email,
           clienteDireccion: $('#catalog-client-address')?.value || '',
