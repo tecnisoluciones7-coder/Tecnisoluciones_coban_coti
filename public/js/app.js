@@ -308,11 +308,12 @@ function renderProducts() {
   $('#product-list').innerHTML = products.map((product) => `
     <article class="product-card">
       <div class="product-chip-row">
-        <span class="product-code">${escapeHtml(product.codigo || 'SIN-CÓDIGO')}</span>
+        <span class="product-code">ID: ${product.id} | ${escapeHtml(product.codigo || 'SIN-CÓDIGO')}</span>
         <span class="product-type">${escapeHtml(product.tipo || 'Producto')}</span>
       </div>
       <h2>${escapeHtml(product.nombre)}</h2>
       <p>${escapeHtml(product.descripcion || 'Sin descripción.')}</p>
+      <p class="product-stock-info">Stock: <strong>${product.tipo === 'Servicio' ? 'N/A' : (product.stock !== undefined ? product.stock : 0)}</strong></p>
       <div class="product-bottom"><strong class="price">${formatMoney(product.precio)}</strong>
         <div class="card-actions"><button class="small-button add" data-action="add" data-id="${product.id}">Agregar</button><button class="small-button" data-action="edit" data-id="${product.id}">Editar</button><button class="small-button danger" data-action="delete" data-id="${product.id}" title="Eliminar producto">Eliminar</button></div>
       </div>
@@ -354,6 +355,9 @@ function handleProductTypeChange() {
     stockInput.disabled = true;
   } else {
     stockInput.disabled = false;
+    if (stockInput.value === '0' || stockInput.value === 0) {
+      stockInput.value = '';
+    }
   }
 }
 
