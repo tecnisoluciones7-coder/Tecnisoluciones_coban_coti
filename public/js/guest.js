@@ -227,47 +227,60 @@ async function submitGuestQuote(event) {
     return;
   }
   
-  const button = $('#guest-quote-form .primary');
-  button.disabled = true;
-  
+  // 1. GUARDAR EN EL HISTORIAL (Con corrección del ID)
   const quoteData = {
-    clienteNombre: "Solicitud Web - Cliente", // Nombre genérico automático
-    clienteTelefono: $('#guest-client-phone').value,
-    clienteEmail: $('#guest-client-email').value,
-    clienteDireccion: $('#guest-client-address').value,
-    notas: $('#guest-quote-notes').value,
+    clienteNombre: "Solicitud Web - Cliente",
+    clienteTelefono: $('#guest-client-phone')?.value || '',
+    clienteEmail: $('#guest-client-email')?.value || '',
+    clienteDireccion: $('#guest-client-address')?.value || '',
+    notas: $('#guest-quote-notes')?.value || '',
     items: state.cart.map((item) => ({
-      productoId: item.productoId,
+      // Corrección crítica: tu carrito usa item.id, no item.productoId
+      productoId: item.id || item.productoId, 
       cantidad: item.cantidad
     })),
-    token: state.token
+    token: state.token || null
   };
   
   try {
-    await api('/api/cotizaciones/guest', {
+    const response = await fetch('/api/cotizaciones/guest', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(quoteData)
     });
     
+    // 2. ESCUCHAR AL SERVIDOR: Si falla, detenemos el proceso
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || errorData.message || 'Faltan datos o token inválido.');
+    }
+    
+    // 3. SOLO SI SE GUARDÓ EN EL HISTORIAL, ABRIMOS WHATSAPP
     const total = state.cart.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
     let mensaje = "Hola, me interesa solicitar la siguiente cotización:\n\n";
+
     state.cart.forEach(item => {
       const subtotal = item.precio * item.cantidad;
       mensaje += `- ${item.cantidad}x ${item.nombre} - ${formatMoney(subtotal)}\n`;
     });
+    
     mensaje += `\nTotal: ${formatMoney(total)}`;
 
     const urlWhatsApp = `https://wa.me/50249397276?text=${encodeURIComponent(mensaje)}`;
     window.open(urlWhatsApp, '_blank');
 
-    $('#quote-success-modal').showModal();
+    // 4. Limpieza de UI
+    if ($('#quote-success-modal')) $('#quote-success-modal').showModal();
+    notify('Cotización procesada exitosamente.', 'success');
+    
     state.cart = [];
     renderCart();
-    $('#guest-quote-form').reset();
+    event.target.reset();
+    
   } catch (error) {
+    // AHORA EL ERROR APARECERÁ EN LA PANTALLA DE TU PÁGINA
     notify(error.message, 'error');
-  } finally {
-    button.disabled = false;
+    console.error("Fallo de registro:", error);
   }
 }
 

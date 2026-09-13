@@ -497,36 +497,50 @@
           return;
         }
 
+        const quoteData = {
+          clienteNombre: "Solicitud Web - Cliente",
+          clienteTelefono: $('#catalog-client-phone')?.value || '',
+          clienteEmail: email,
+          clienteDireccion: $('#catalog-client-address')?.value || '',
+          notas: notes,
+          items: state.cart.map((item) => ({
+            productoId: item.id || item.productoId, 
+            cantidad: item.cantidad
+          })),
+          token: state.token || null
+        };
+
         try {
-          await fetch('/api/cotizaciones/guest', {
+          const response = await fetch('/api/cotizaciones/guest', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              clienteNombre: "Solicitud Web - Cliente",
-              clienteEmail: email,
-              notas: notes,
-              items: state.cart.map(item => ({ productoId: item.productoId, cantidad: item.cantidad }))
-            })
+            body: JSON.stringify(quoteData)
           });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.message || 'Faltan datos o token inválido.');
+          }
+
+          const total = state.cart.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+          let mensaje = "Hola, me interesa solicitar la siguiente cotización:\n\n";
+          state.cart.forEach(item => {
+            const subtotal = item.precio * item.cantidad;
+            mensaje += `- ${item.cantidad}x ${item.nombre} - ${formatMoney(subtotal)}\n`;
+          });
+          mensaje += `\nTotal: ${formatMoney(total)}`;
+
+          const urlWhatsApp = `https://wa.me/50249397276?text=${encodeURIComponent(mensaje)}`;
+          window.open(urlWhatsApp, '_blank');
+
+          notify(`Gracias ${name}. Un asesor revisará tu cotización y se pondrá en contacto contigo.`, 'success');
+          event.target.reset();
+          state.cart = [];
+          renderCart();
         } catch (error) {
-          console.error("Error al guardar en el historial:", error);
+          notify(error.message, 'error');
+          console.error("Fallo de registro:", error);
         }
-
-        const total = state.cart.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
-        let mensaje = "Hola, me interesa solicitar la siguiente cotización:\n\n";
-        state.cart.forEach(item => {
-          const subtotal = item.precio * item.cantidad;
-          mensaje += `- ${item.cantidad}x ${item.nombre} - ${formatMoney(subtotal)}\n`;
-        });
-        mensaje += `\nTotal: ${formatMoney(total)}`;
-
-        const urlWhatsApp = `https://wa.me/50249397276?text=${encodeURIComponent(mensaje)}`;
-        window.open(urlWhatsApp, '_blank');
-
-        notify(`Gracias ${name}. Un asesor revisará tu cotización y se pondrá en contacto contigo.`, 'success');
-        event.target.reset();
-        state.cart = [];
-        renderCart();
       }
 
       function formatMoney(value) {
