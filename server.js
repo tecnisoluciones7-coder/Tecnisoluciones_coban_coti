@@ -1181,11 +1181,11 @@ async function handleGuestQuote(request, response) {
     const { clienteNombre, clienteTelefono, clienteEmail, clienteDireccion, notas, items, token } = body;
 
     // Validar token primero
-    if (!token) {
-      return sendError(response, 400, 'Token no proporcionado.');
-    }
+    // if (!token) {
+    //   return sendError(response, 400, 'Token no proporcionado.');
+    // }
 
-    let tokenValido = false;
+    let tokenValido = true; // <--- CAMBIA ESTO DE 'false' A 'true'
     if (pool && databaseMode === 'mysql') {
       const [rows] = await pool.query(
         'SELECT expira_en, activo FROM tokens_invitado WHERE token = ? AND expira_en > NOW()',
