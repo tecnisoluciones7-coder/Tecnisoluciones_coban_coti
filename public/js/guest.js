@@ -228,8 +228,9 @@ async function submitGuestQuote(event) {
   }
   
   // 1. GUARDAR EN EL HISTORIAL (Con corrección del ID)
+  const name = $('#guest-client-name')?.value;
   const quoteData = {
-    clienteNombre: "Solicitud Web - Cliente",
+    clienteNombre: `Solicitud Web - ${name || 'Cliente'}`,
     clienteTelefono: $('#guest-client-phone')?.value || '',
     clienteEmail: $('#guest-client-email')?.value || '',
     clienteDireccion: $('#guest-client-address')?.value || '',
