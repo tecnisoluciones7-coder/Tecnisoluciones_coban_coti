@@ -38,15 +38,6 @@
       "actualizado_en": "2026-08-22T04:02:57.102Z"
     },
     {
-      "id": 5,
-      "codigo": "BAL-UTP",
-      "nombre": "Video balun (par)",
-      "descripcion": "Transmisor y receptor de video por cable UTP Cat5e.",
-      "precio": 45,
-      "creado_en": "2026-08-22T04:02:57.102Z",
-      "actualizado_en": "2026-08-22T04:02:57.102Z"
-    },
-    {
       "id": 6,
       "codigo": "INS-CCTV",
       "nombre": "Servicio de instalación",
